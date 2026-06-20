@@ -1,19 +1,33 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import dynamic from 'next/dynamic'
 
-export default function RespondentDashboard() {
-  const supabase = createClient()
+function RespondentDashboardContent() {
+  const router = useRouter()
   const [surveys, setSurveys] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchSurveys = async () => {
       try {
+        // Safe runtime initialization guard check
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+        if (!supabaseUrl || !supabaseAnonKey) {
+          console.warn('Postponing client initialization check until system config runtime mounts.')
+          return
+        }
+
+        // LAZY IMPORT: Imports the client ONLY when this hook mounts on the user's browser runtime environment
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+
         const {
           data: { user },
         } = await supabase.auth.getUser()
@@ -50,7 +64,7 @@ export default function RespondentDashboard() {
     }
 
     fetchSurveys()
-  }, [supabase])
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -83,10 +97,10 @@ export default function RespondentDashboard() {
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-lg">
-                      {survey.index_versions?.[0]?.name}
+                      {survey.index_versions?.name || 'Unnamed Framework'}
                     </CardTitle>
                     <CardDescription>
-                      v{survey.index_versions?.[0]?.version}
+                      v{survey.index_versions?.version || '1.0'}
                     </CardDescription>
                   </div>
                   <span className={`px-2.5 py-1.5 rounded-full text-xs font-semibold ${
@@ -100,7 +114,7 @@ export default function RespondentDashboard() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2 text-sm text-gray-600">
-                  <p>Started: {new Date(survey.initiated_at).toLocaleDateString()}</p>
+                  <p>Started: {survey.initiated_at ? new Date(survey.initiated_at).toLocaleDateString() : 'N/A'}</p>
                   {survey.submitted_at && (
                     <p>Completed: {new Date(survey.submitted_at).toLocaleDateString()}</p>
                   )}
@@ -118,3 +132,10 @@ export default function RespondentDashboard() {
     </div>
   )
 }
+
+// Disable SSR pre-rendering compilation entirely
+const RespondentDashboard = dynamic(() => Promise.resolve(RespondentDashboardContent), {
+  ssr: false,
+})
+
+export default RespondentDashboard

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Trash2, MoveRight } from 'lucide-react'
+import { AlertCircle, Trash2 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 
 interface OrphanedItem {
   id: string
@@ -15,17 +16,14 @@ interface OrphanedItem {
   previous_parent_id?: string
 }
 
-export default function OrphansPage() {
+function OrphansPageContent() {
   const [orphans, setOrphans] = useState<{
     pillars: OrphanedItem[]
     dimensions: OrphanedItem[]
     questions: OrphanedItem[]
   }>({ pillars: [], dimensions: [], questions: [] })
   const [loading, setLoading] = useState(true)
-  const [reassignMode, setReassignMode] = useState(false)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
-  const [availablePillars, setAvailablePillars] = useState<any[]>([])
-  const [selectedNewParent, setSelectedNewParent] = useState<string>('')
 
   useEffect(() => {
     fetchOrphans()
@@ -43,21 +41,6 @@ export default function OrphansPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const fetchAvailablePillars = async () => {
-    // This would need to be enhanced to fetch available pillars from a specific version
-    // For now, we'll keep it simple
-  }
-
-  const handleSelectItem = (id: string) => {
-    const newSelected = new Set(selectedItems)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
-    } else {
-      newSelected.add(id)
-    }
-    setSelectedItems(newSelected)
   }
 
   const handleDeleteOrphaned = async (id: string, tableName: string) => {
@@ -259,3 +242,11 @@ export default function OrphansPage() {
     </div>
   )
 }
+
+// FIX: Wrap inside dynamic loading component setting SSR option to false
+// This ensures that the page executes strictly on the user's browser, preventing compiler evaluation issues during build
+const OrphansPage = dynamic(() => Promise.resolve(OrphansPageContent), {
+  ssr: false,
+})
+
+export default OrphansPage

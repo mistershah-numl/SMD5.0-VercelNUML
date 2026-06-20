@@ -18,8 +18,9 @@ import {
 import Link from 'next/link'
 import { PlusCircle, Trash2, Loader2, ArrowRight } from 'lucide-react'
 import type { IndexVersion, Company } from '@/lib/types/database'
+import dynamic from 'next/dynamic'
 
-export default function VersionsPage() {
+function VersionsPageContent() {
   const supabase = createClient()
   const router = useRouter()
   const [company, setCompany] = useState<Company | null>(null)
@@ -281,3 +282,10 @@ export default function VersionsPage() {
     </div>
   )
 }
+
+// FIX: Wrap inside dynamic helper setting SSR generation strictly off
+const VersionsPage = dynamic(() => Promise.resolve(VersionsPageContent), {
+  ssr: false,
+})
+
+export default VersionsPage
