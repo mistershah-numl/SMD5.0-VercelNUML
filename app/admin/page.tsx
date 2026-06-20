@@ -4,68 +4,75 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { PlusCircle, ArrowRight } from 'lucide-react'
+import { PlusCircle, ArrowRight, CheckCircle, XCircle, Building2 } from 'lucide-react'
 import type { IndexVersion, Company } from '@/lib/types/database'
 
 export default function AdminDashboard() {
   const supabase = createClient()
-  const [company, setCompany] = useState<Company | null>(null)
   const [versions, setVersions] = useState<IndexVersion[]>([])
+  const [pendingCompanies, setPendingCompanies] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
+    fetchDashboardData()
+  }, [])
 
-        if (!user) return
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true)
+      
+      // 1. Fetch Global or Admin Assessment Versions
+      const { data: versionsData, error: versionsError } = await supabase
+        .from('index_versions')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-        // Fetch user's company
-        const { data: companies, error: companyError } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('created_by', user.id)
-          .single()
+      if (versionsError) throw versionsError
+      setVersions(versionsData || [])
 
-        if (companyError && companyError.code !== 'PGRST116') {
-          throw companyError
-        }
+      // 2. Fetch Companies awaiting Administrator Approval
+      const { data: companiesData, error: companyError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('status', 'pending')
 
-        if (companies) {
-          setCompany(companies)
-
-          // Fetch assessment versions
-          const { data: versionsData, error: versionsError } = await supabase
-            .from('index_versions')
-            .select('*')
-            .eq('company_id', companies.id)
-            .order('created_at', { ascending: false })
-
-          if (versionsError) throw versionsError
-          setVersions(versionsData || [])
-        }
-
-        setLoading(false)
-      } catch (err) {
-        console.error('[v0] Error fetching data:', err)
-        setError(err instanceof Error ? err.message : 'An error occurred')
-        setLoading(false)
+      if (!companyError && companiesData) {
+        setPendingCompanies(companiesData)
       }
-    }
 
-    fetchData()
-  }, [supabase])
+      setLoading(false)
+    } catch (err) {
+      console.error('Error loading dashboard data:', err)
+      setError(err instanceof Error ? err.message : 'An error occurred')
+      setLoading(false)
+    }
+  }
+
+  const handleCompanyAction = async (companyId: string, action: 'approved' | 'rejected') => {
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .update({ status: action, updated_at: new Date().toISOString() })
+        .eq('id', companyId)
+
+      if (error) throw error
+      
+      // Update local state instantly
+      setPendingCompanies(pendingCompanies.filter(c => c.id !== companyId))
+    } catch (err) {
+      console.error(`Failed to execute ${action} on company:`, err)
+    }
+  }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <p className="mt-2 text-muted-foreground">Loading dashboard...</p>
+          <p className="mt-2 text-muted-foreground">Loading platform panel...</p>
         </div>
       </div>
     )
@@ -76,173 +83,72 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-2">Manage your assessment framework</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Admin Workspace Console</h1>
+          <p className="text-muted-foreground mt-1">Configure frameworks, formulas, and approve company access keys</p>
         </div>
         <Button asChild>
-          <Link href="/admin/versions/new">
+          <Link href="/admin/versions">
             <PlusCircle className="mr-2 h-4 w-4" />
-            New Assessment Version
+            Manage Assessment Frameworks
           </Link>
         </Button>
       </div>
 
-      {/* Company Info */}
-      {company ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Company</CardTitle>
-            <CardDescription>Assessment framework owner</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <p className="font-semibold text-lg">{company.name}</p>
-              {company.description && <p className="text-sm text-muted-foreground">{company.description}</p>}
-              <p className="text-xs text-muted-foreground">Created: {new Date(company.created_at).toLocaleDateString()}</p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>No Company Found</CardTitle>
-            <CardDescription>You need to create a company first to start building assessments</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
-      {/* Assessment Versions */}
-      <div>
-        <h2 className="text-2xl font-bold mb-4">Assessment Versions ({versions.length})</h2>
-        {versions.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <p className="text-muted-foreground mb-4">
-                  No assessment versions created yet. Create your first assessment version to define pillars, dimensions, and questions.
-                </p>
-                <Button asChild>
-                  <Link href="/admin/versions/new">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Create First Version
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4">
-            {versions.map((version) => (
-              <Card key={version.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-xl">{version.name}</CardTitle>
-                      <CardDescription>Version {version.version}</CardDescription>
-                    </div>
-                    <div className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded">
-                      {new Date(version.created_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                </CardHeader>
-                {version.description && (
-                  <CardContent className="pb-4">
-                    <p className="text-sm text-muted-foreground">{version.description}</p>
-                  </CardContent>
-                )}
-                <CardContent className="pt-0">
-                  <div className="flex gap-2">
-                    <Button variant="default" asChild className="gap-2">
-                      <Link href={`/admin/versions/${version.id}`}>
-                        View <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link href={`/admin/versions/${version.id}/edit`}>Edit</Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Quick Stats */}
-      <div className="grid md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Assessment Versions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{versions.length}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Active Surveys</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">0</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Responses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">0</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Getting Started Guide */}
+      {/* Company Approval Pipeline */}
       <Card>
         <CardHeader>
-          <CardTitle>Getting Started</CardTitle>
-          <CardDescription>Follow these steps to set up your assessment</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            Company Registration Pipeline ({pendingCompanies.length})
+          </CardTitle>
+          <CardDescription>Approve or Reject organization requests to unlock survey paths</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold">
-              1
+        <CardContent>
+          {pendingCompanies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No pending organization approvals at this time.</p>
+          ) : (
+            <div className="divide-y divide-border border rounded-md bg-background">
+              {pendingCompanies.map((comp) => (
+                <div key={comp.id} className="p-4 flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <p className="font-semibold text-sm">{comp.name}</p>
+                    <p className="text-xs text-muted-foreground">{comp.description || 'No description provided.'}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      className="bg-green-600 hover:bg-green-700 gap-1 text-white"
+                      onClick={() => handleCompanyAction(comp.id, 'approved')}
+                    >
+                      <CheckCircle size={14} /> Approve
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="destructive" 
+                      className="gap-1"
+                      onClick={() => handleCompanyAction(comp.id, 'rejected')}
+                    >
+                      <XCircle size={14} /> Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <h3 className="font-semibold">Create Assessment Versions</h3>
-              <p className="text-sm text-muted-foreground">Create different versions of your assessment framework</p>
-            </div>
-          </div>
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold">
-              2
-            </div>
-            <div>
-              <h3 className="font-semibold">Define Pillars & Dimensions</h3>
-              <p className="text-sm text-muted-foreground">Organize your assessment structure with pillars and dimensions</p>
-            </div>
-          </div>
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold">
-              3
-            </div>
-            <div>
-              <h3 className="font-semibold">Add Questions</h3>
-              <p className="text-sm text-muted-foreground">Create survey questions linked to dimensions</p>
-            </div>
-          </div>
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold">
-              4
-            </div>
-            <div>
-              <h3 className="font-semibold">Configure Scoring</h3>
-              <p className="text-sm text-muted-foreground">Set up scoring formulas and maturity levels</p>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Assessment Framework Matrices Summary */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Global Master Frameworks</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-foreground">{versions.length}</p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
