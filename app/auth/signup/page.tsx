@@ -15,7 +15,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-export default function Page() {
+export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [repeatPassword, setRepeatPassword] = useState('')
@@ -35,8 +35,14 @@ export default function Page() {
       return
     }
 
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long')
+      setIsLoading(false)
+      return
+    }
+
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -46,7 +52,10 @@ export default function Page() {
         },
       })
       if (error) throw error
-      router.push('/auth/sign-up-success')
+      
+      // If auto-confirm is enabled in Supabase, they log in straight away. 
+      // Otherwise, we gracefully redirect them to login directly since you want to bypass the verification alert.
+      router.push('/auth/login?message=Account created successfully. Please login.')
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
@@ -55,32 +64,35 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
+    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10 bg-background">
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-2xl">Sign up</CardTitle>
-              <CardDescription>Create a new account</CardDescription>
+              <CardTitle className="text-2xl">Create Account</CardTitle>
+              <CardDescription>Sign up to start using the SDM5 Assessment Platform</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSignUp}>
                 <div className="flex flex-col gap-6">
+                  {error && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm border border-red-200">
+                      {error}
+                    </div>
+                  )}
                   <div className="grid gap-2">
                     <Label htmlFor="email">Email</Label>
                     <Input
                       id="email"
                       type="email"
-                      placeholder="m@example.com"
+                      placeholder="you@example.com"
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
                   <div className="grid gap-2">
-                    <div className="flex items-center">
-                      <Label htmlFor="password">Password</Label>
-                    </div>
+                    <Label htmlFor="password">Password</Label>
                     <Input
                       id="password"
                       type="password"
@@ -90,28 +102,22 @@ export default function Page() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <div className="flex items-center">
-                      <Label htmlFor="repeat-password">Repeat Password</Label>
-                    </div>
+                    <Label htmlFor="repeatPassword">Confirm Password</Label>
                     <Input
-                      id="repeat-password"
+                      id="repeatPassword"
                       type="password"
                       required
                       value={repeatPassword}
                       onChange={(e) => setRepeatPassword(e.target.value)}
                     />
                   </div>
-                  {error && <p className="text-sm text-red-500">{error}</p>}
                   <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? 'Creating an account...' : 'Sign up'}
+                    {isLoading ? 'Creating account...' : 'Sign Up'}
                   </Button>
                 </div>
                 <div className="mt-4 text-center text-sm">
                   Already have an account?{' '}
-                  <Link
-                    href="/auth/login"
-                    className="underline underline-offset-4"
-                  >
+                  <Link href="/auth/login" className="underline underline-offset-4 text-blue-600 hover:text-blue-800">
                     Login
                   </Link>
                 </div>

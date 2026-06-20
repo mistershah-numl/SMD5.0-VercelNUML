@@ -12,15 +12,17 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, Suspense } from 'react'
 
-export default function Page() {
+function LoginContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const message = searchParams.get('message')
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,17 +31,15 @@ export default function Page() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
-        options: {
-          emailRedirectTo:
-            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-            `${window.location.origin}/auth/callback`,
-        },
       })
       if (error) throw error
-      router.push('/protected')
+      
+      // Successfully authenticated -> Redirect to admin workspace home
+      router.push('/admin')
+      router.refresh()
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
@@ -48,7 +48,7 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
+    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10 bg-background">
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
           <Card>
@@ -61,6 +61,16 @@ export default function Page() {
             <CardContent>
               <form onSubmit={handleLogin}>
                 <div className="flex flex-col gap-6">
+                  {message && (
+                    <div className="p-3 bg-blue-50 text-blue-700 rounded-md text-sm border border-blue-200">
+                      {message}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm border border-red-200">
+                      {error}
+                    </div>
+                  )}
                   <div className="grid gap-2">
                     <Label htmlFor="email">Email</Label>
                     <Input
@@ -82,17 +92,13 @@ export default function Page() {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                  {error && <p className="text-sm text-red-500">{error}</p>}
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'Logging in...' : 'Login'}
                   </Button>
                 </div>
                 <div className="mt-4 text-center text-sm">
                   Don&apos;t have an account?{' '}
-                  <Link
-                    href="/auth/sign-up"
-                    className="underline underline-offset-4"
-                  >
+                  <Link href="/auth/signup" className="underline underline-offset-4 text-blue-600 hover:text-blue-800">
                     Sign up
                   </Link>
                 </div>
@@ -102,5 +108,13 @@ export default function Page() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <LoginContent />
+    </Suspense>
   )
 }
